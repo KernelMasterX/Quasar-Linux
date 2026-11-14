@@ -9,6 +9,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Gerekli paketleri kur
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev libdw-dev libiberty-dev dwarves
+
       - name: Kernel'i indir
         run: |
           curl -L -O https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.63.tar.xz

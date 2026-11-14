@@ -1,0 +1,28 @@
+name: Quasar Linux Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kernel'i indir
+        run: |
+          curl -L -O https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.63.tar.xz
+          tar -xf linux-6.18.63.tar.xz
+          ls -lh
+
+      - name: Kernel'i derle
+        run: |
+          cd linux-6.18.63
+          make defconfig
+          make -j$(nproc)
+
+      - name: Kernel'i kaydet
+        uses: actions/upload-artifact@v4
+        with:
+          name: quasar-kernel-6.18.63
+          path: linux-6.18.63/arch/x86/boot/bzImage

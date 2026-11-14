@@ -12,22 +12,59 @@ jobs:
       - name: Gerekli paketleri kur
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev libdw-dev libiberty-dev dwarves
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev libdw-dev libiberty-dev dwarves cpio busybox-static
 
       - name: Kernel'i indir
         run: |
           curl -L -O https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.63.tar.xz
           tar -xf linux-6.18.63.tar.xz
-          ls -lh
 
-      - name: Kernel'i derle
+      - name: Kernel'i Yapılandır ve Derle
         run: |
           cd linux-6.18.63
           make defconfig
+          
+          # Initramfs ve Devtmpfs desteğini aktif et (Açılışta hata almamak için şart)
+          ./scripts/config --enable CONFIG_DEVTMPFS
+          ./scripts/config --enable CONFIG_DEVTMPFS_MOUNT
+          ./scripts/config --enable CONFIG_BLK_DEV_INITRD
+          
           make -j$(nproc)
 
-      - name: Kernel'i kaydet
+      - name: Minimal Initramfs (RootFS) Oluştur
+        run: |
+          mkdir -p initramfs/{bin,sbin,etc,proc,sys,dev,root}
+          cd initramfs
+          
+          # Busybox'ı initramfs içine kopyala
+          cp /bin/busybox bin/
+          
+          # Busybox linklerini oluştur
+          ./bin/busybox --install -s bin
+          
+          # İlk açılış script'ini (init) yaz
+          cat << 'EOF' > init
+          #!/bin/sh
+          mount -t proc none /proc
+          mount -t sysfs none /sys
+          mount -t devtmpfs none /dev
+          clear
+          echo "======================================"
+          echo "  Quasar Linux'a Hos Geldin Kanka! 🚀  "
+          echo "======================================"
+          exec /bin/sh
+          EOF
+          
+          chmod +x init
+          
+          # İnitramfs arşivini paketle
+          find . -print0 | cpio --null -ov --format=newc > ../linux-6.18.63/initramfs.cpio
+          cd ..
+
+      - name: Derlenen Kernel ve Initramfs'i Kaydet
         uses: actions/upload-artifact@v4
         with:
-          name: quasar-kernel-6.18.63
-          path: linux-6.18.63/arch/x86/boot/bzImage
+          name: quasar-linux-files
+          path: |
+            linux-6.18.63/arch/x86/boot/bzImage
+            linux-6.18.63/initramfs.cpio

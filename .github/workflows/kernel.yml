@@ -118,11 +118,13 @@ jobs:
           set default=0
 
           menuentry "Quasar Linux (Standard)" {
-              linux /boot/bzImage console=tty0 vga=normal rdinit=/init
+              set gfxpayload=text
+              linux /boot/bzImage console=tty0 rdinit=/init
               initrd /boot/initramfs.cpio.gz
           }
 
           menuentry "Quasar Linux (Safe / Debug Mode)" {
+              set gfxpayload=text
               linux /boot/bzImage console=tty0 console=ttyS0,115200 nomodeset earlyprintk=vga loglevel=7 rdinit=/init
               initrd /boot/initramfs.cpio.gz
           }

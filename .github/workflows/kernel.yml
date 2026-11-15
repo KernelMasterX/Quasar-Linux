@@ -1,4 +1,4 @@
-name: Quasar Linux Build
+name: Quasar Linux Build (5.15 LTS)
 
 on:
   push:
@@ -14,15 +14,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev libdw-dev libiberty-dev dwarves cpio busybox-static grub-pc-bin grub-common xorriso mtools file
 
-      - name: Kernel'i indir
+      - name: Kernel 5.15 LTS İndir
         run: |
-          curl -L -O https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.63.tar.xz
-          tar -xf linux-6.18.63.tar.xz
+          curl -L -O https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.15.225.tar.xz
+          tar -xf linux-5.15.225.tar.xz
 
       - name: Kernel'i Yapılandır ve Derle
         run: |
-          cd linux-6.18.63
+          cd linux-5.15.225
           make defconfig
+
+          # --- Emülatör ve Sanallaştırma Uyumluluğu ---
+          ./scripts/config --enable CONFIG_HYPERVISOR_GUEST
+          ./scripts/config --enable CONFIG_KVM_GUEST
+          ./scripts/config --enable CONFIG_PARAVIRT
 
           # --- CONSOLE + TTY + SERIAL ---
           ./scripts/config --enable CONFIG_VT
@@ -96,7 +101,7 @@ jobs:
 
           clear
           echo "=========================================="
-          echo "   Quasar Linux'a Hos Geldin Kanka!       "
+          echo "   Quasar Linux (5.15 LTS) Hos Geldin!    "
           echo "=========================================="
           echo ""
 
@@ -104,28 +109,28 @@ jobs:
           EOF
 
           chmod +x init
-          find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../linux-6.18.63/initramfs.cpio.gz
+          find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../linux-5.15.225/initramfs.cpio.gz
           cd ..
 
       - name: Bootable ISO Oluştur (GRUB)
         run: |
           mkdir -p iso/boot/grub
-          cp linux-6.18.63/arch/x86/boot/bzImage iso/boot/bzImage
-          cp linux-6.18.63/initramfs.cpio.gz iso/boot/initramfs.cpio.gz
+          cp linux-5.15.225/arch/x86/boot/bzImage iso/boot/bzImage
+          cp linux-5.15.225/initramfs.cpio.gz iso/boot/initramfs.cpio.gz
 
           cat << 'EOF' > iso/boot/grub/grub.cfg
           set timeout=3
           set default=0
 
-          menuentry "Quasar Linux (Standard)" {
+          menuentry "Quasar Linux 5.15 (Standard)" {
               set gfxpayload=text
-              linux /boot/bzImage console=tty0 console=ttyS0,115200 rdinit=/init
+              linux /boot/bzImage console=tty0 console=ttyS0,115200 noapic nolapic rdinit=/init
               initrd /boot/initramfs.cpio.gz
           }
 
-          menuentry "Quasar Linux (Safe / Debug Mode)" {
+          menuentry "Quasar Linux 5.15 (Safe Mode)" {
               set gfxpayload=text
-              linux /boot/bzImage console=tty0 console=ttyS0,115200 nomodeset earlyprintk=serial,ttyS0,115200 loglevel=7 rdinit=/init
+              linux /boot/bzImage console=tty0 console=ttyS0,115200 noapic nolapic nomodeset earlyprintk=serial,ttyS0,115200 loglevel=7 rdinit=/init
               initrd /boot/initramfs.cpio.gz
           }
           EOF

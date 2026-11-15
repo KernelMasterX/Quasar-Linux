@@ -31,6 +31,8 @@ jobs:
           ./scripts/config --enable CONFIG_DUMMY_CONSOLE
           ./scripts/config --enable CONFIG_TTY
           ./scripts/config --enable CONFIG_PRINTK
+          ./scripts/config --enable CONFIG_SERIAL_8250_CONSOLE
+          ./scripts/config --enable CONFIG_EARLY_PRINTK
 
           # --- STD (Bochs) + CIRRUS ikisi de açık ---
           ./scripts/config --enable CONFIG_DRM
@@ -38,8 +40,7 @@ jobs:
           ./scripts/config --enable CONFIG_DRM_CIRRUS_QEMU
           ./scripts/config --enable CONFIG_FB
           ./scripts/config --enable CONFIG_FRAMEBUFFER_CONSOLE
-          # STD icin kritik: framebuffer emulasyonu kapali olursa VGA text modunda kalir
-          ./scripts/config --disable CONFIG_DRM_FBDEV_EMULATION
+          ./scripts/config --enable CONFIG_DRM_FBDEV_EMULATION
 
           # --- DISK ---
           ./scripts/config --enable CONFIG_ATA
@@ -102,7 +103,7 @@ jobs:
           set default=0
 
           menuentry "Quasar Linux" {
-              linux /boot/bzImage console=tty0 loglevel=7 nomodeset
+              linux /boot/bzImage console=tty0 console=ttyS0 loglevel=7 earlyprintk=vga init=/init root=/dev/ram0 rw
               initrd /boot/initramfs.cpio
           }
           EOF

@@ -12,7 +12,7 @@ jobs:
       - name: Gerekli paketleri kur
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev libdw-dev libiberty-dev dwarves cpio busybox-static grub-pc-bin grub-common xorriso mtools
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev libdw-dev libiberty-dev dwarves cpio busybox-static grub-pc-bin grub-common xorriso mtools file
 
       - name: Kernel'i indir
         run: |
@@ -34,7 +34,7 @@ jobs:
           ./scripts/config --enable CONFIG_SERIAL_8250_CONSOLE
           ./scripts/config --enable CONFIG_EARLY_PRINTK
 
-          # --- STD (Bochs) + CIRRUS ikisi de açık ---
+          # --- STD (Bochs) + CIRRUS ---
           ./scripts/config --enable CONFIG_DRM
           ./scripts/config --enable CONFIG_DRM_BOCHS
           ./scripts/config --enable CONFIG_DRM_CIRRUS_QEMU
@@ -57,8 +57,12 @@ jobs:
           ./scripts/config --enable CONFIG_BLK_DEV_RAM
           ./scripts/config --enable CONFIG_RD_GZIP
 
+          # --- PANIC OLURSA REBOOT ATMA, HATAYI GOSTER ---
+          ./scripts/config --enable CONFIG_PANIC_TIMEOUT
+
           make olddefconfig
           make -j$(nproc) bzImage
+          ls -lh arch/x86/boot/bzImage
 
       - name: Minimal Initramfs (RootFS) Oluştur
         run: |
@@ -66,13 +70,12 @@ jobs:
           mkdir -p initramfs/{bin,sbin,etc,proc,sys,dev,root}
           cd initramfs
 
-          cp $(which busybox) bin/busybox
+          # STATIK busybox kullan, dinamik olursa init calismaz
+          cp /bin/busybox bin/busybox
+          file bin/busybox
+          ldd bin/busybox || echo "STATIC - tamam"
           chmod +x bin/busybox
           ./bin/busybox --install -s bin
-
-          sudo mknod -m 600 dev/console c 5 1 || mknod -m 600 dev/console c 5 1
-          sudo mknod -m 666 dev/null c 1 3 || mknod -m 666 dev/null c 1 3
-          sudo mknod -m 666 dev/tty c 5 0 || mknod -m 666 dev/tty c 5 0
 
           cat << 'EOF' > init
           #!/bin/sh
@@ -81,16 +84,18 @@ jobs:
           mount -t proc none /proc
           mount -t sysfs none /sys
           mount -t devtmpfs none /dev
-          [ -e /dev/console ] || mknod -m 600 /dev/console c 5 1
           echo "======================================"
           echo "  Quasar Linux'a Hos Geldin Kanka! "
           echo "======================================"
-          exec /bin/sh
+          exec setsid /bin/sh -l
           EOF
 
           chmod +x init
-          find . -print0 | cpio --null -ov --format=newc > ../linux-6.18.63/initramfs.cpio
+          find . | cpio -o -H newc > ../linux-6.18.63/initramfs.cpio
           cd ..
+          ls -lh linux-6.18.63/initramfs.cpio
+          echo "--- initramfs icindekiler ---"
+          cpio -t < linux-6.18.63/initramfs.cpio | head -n 30
 
       - name: Bootable ISO Oluştur (GRUB)
         run: |
@@ -103,12 +108,13 @@ jobs:
           set default=0
 
           menuentry "Quasar Linux" {
-              linux /boot/bzImage console=tty0 console=ttyS0 loglevel=7 earlyprintk=vga init=/init root=/dev/ram0 rw
+              linux /boot/bzImage console=tty0 loglevel=7 earlyprintk=vga nomodeset panic=30 init=/init
               initrd /boot/initramfs.cpio
           }
           EOF
 
           grub-mkrescue -o quasar-linux.iso iso
+          ls -lh quasar-linux.iso
 
       - name: ISO Dosyasını Kaydet
         uses: actions/upload-artifact@v4

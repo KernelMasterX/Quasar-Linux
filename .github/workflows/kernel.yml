@@ -24,31 +24,36 @@ jobs:
           cd linux-6.18.63
           make defconfig
 
-          # --- CONSOLE + TTY ---
+          # --- CONSOLE + TTY + SERIAL ---
           ./scripts/config --enable CONFIG_VT
           ./scripts/config --enable CONFIG_VT_CONSOLE
           ./scripts/config --enable CONFIG_VGA_CONSOLE
           ./scripts/config --enable CONFIG_DUMMY_CONSOLE
           ./scripts/config --enable CONFIG_TTY
           ./scripts/config --enable CONFIG_PRINTK
+          ./scripts/config --enable CONFIG_SERIAL_8250
           ./scripts/config --enable CONFIG_SERIAL_8250_CONSOLE
           ./scripts/config --enable CONFIG_EARLY_PRINTK
 
-          # --- STD (Bochs) + CIRRUS ---
+          # --- FRAMEBUFFER / VIDEO (Limbo QEMU uyumlu) ---
+          ./scripts/config --enable CONFIG_FB
+          ./scripts/config --enable CONFIG_FB_VESA
+          ./scripts/config --enable CONFIG_FB_EFI
+          ./scripts/config --enable CONFIG_FRAMEBUFFER_CONSOLE
           ./scripts/config --enable CONFIG_DRM
           ./scripts/config --enable CONFIG_DRM_BOCHS
           ./scripts/config --enable CONFIG_DRM_CIRRUS_QEMU
-          ./scripts/config --enable CONFIG_FB
-          ./scripts/config --enable CONFIG_FRAMEBUFFER_CONSOLE
           ./scripts/config --enable CONFIG_DRM_FBDEV_EMULATION
 
-          # --- DISK ---
+          # --- DISK + DOSYA SISTEMLERI ---
           ./scripts/config --enable CONFIG_ATA
           ./scripts/config --enable CONFIG_ATA_PIIX
           ./scripts/config --enable CONFIG_SATA_AHCI
+          ./scripts/config --enable CONFIG_VIRTIO_PCI
           ./scripts/config --enable CONFIG_VIRTIO_BLK
           ./scripts/config --enable CONFIG_EXT4_FS
           ./scripts/config --enable CONFIG_ISO9660_FS
+          ./scripts/config --enable CONFIG_TMPFS
 
           # --- INITRAMFS ---
           ./scripts/config --enable CONFIG_DEVTMPFS
@@ -57,59 +62,69 @@ jobs:
           ./scripts/config --enable CONFIG_BLK_DEV_RAM
           ./scripts/config --enable CONFIG_RD_GZIP
 
-          # --- PANIC OLURSA REBOOT ATMA, HATAYI GOSTER ---
-          ./scripts/config --enable CONFIG_PANIC_TIMEOUT
+          # --- KERNEL PANIC KONTROLU ---
+          ./scripts/config --set-val CONFIG_PANIC_TIMEOUT 0
 
           make olddefconfig
           make -j$(nproc) bzImage
-          ls -lh arch/x86/boot/bzImage
 
       - name: Minimal Initramfs (RootFS) Oluştur
         run: |
           rm -rf initramfs
-          mkdir -p initramfs/{bin,sbin,etc,proc,sys,dev,root}
+          mkdir -p initramfs/{bin,sbin,etc,proc,sys,dev,root,tmp}
           cd initramfs
 
-          # STATIK busybox kullan, dinamik olursa init calismaz
+          sudo mknod -m 622 dev/console c 5 1
+          sudo mknod -m 666 dev/null c 1 3
+
           cp /bin/busybox bin/busybox
-          file bin/busybox
-          ldd bin/busybox || echo "STATIC - tamam"
           chmod +x bin/busybox
           ./bin/busybox --install -s bin
+          ./bin/busybox --install -s sbin
 
           cat << 'EOF' > init
           #!/bin/sh
           export PATH=/bin:/sbin
           export TERM=linux
+
           mount -t proc none /proc
           mount -t sysfs none /sys
           mount -t devtmpfs none /dev
-          echo "======================================"
-          echo "  Quasar Linux'a Hos Geldin Kanka! "
-          echo "======================================"
-          exec setsid /bin/sh -l
+          mount -t tmpfs none /tmp
+
+          echo 1 > /proc/sys/kernel/printk
+
+          clear
+          echo "=========================================="
+          echo "   Quasar Linux'a Hos Geldin Kanka!       "
+          echo "=========================================="
+          echo ""
+
+          exec setsid cttyhack /bin/sh
           EOF
 
           chmod +x init
-          find . | cpio -o -H newc > ../linux-6.18.63/initramfs.cpio
+          find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../linux-6.18.63/initramfs.cpio.gz
           cd ..
-          ls -lh linux-6.18.63/initramfs.cpio
-          echo "--- initramfs icindekiler ---"
-          cpio -t < linux-6.18.63/initramfs.cpio | head -n 30
 
       - name: Bootable ISO Oluştur (GRUB)
         run: |
           mkdir -p iso/boot/grub
           cp linux-6.18.63/arch/x86/boot/bzImage iso/boot/bzImage
-          cp linux-6.18.63/initramfs.cpio iso/boot/initramfs.cpio
+          cp linux-6.18.63/initramfs.cpio.gz iso/boot/initramfs.cpio.gz
 
           cat << 'EOF' > iso/boot/grub/grub.cfg
-          set timeout=5
+          set timeout=3
           set default=0
 
-          menuentry "Quasar Linux" {
-              linux /boot/bzImage console=tty0 loglevel=7 earlyprintk=vga nomodeset panic=30 init=/init
-              initrd /boot/initramfs.cpio
+          menuentry "Quasar Linux (Standard)" {
+              linux /boot/bzImage console=tty0 vga=normal rdinit=/init
+              initrd /boot/initramfs.cpio.gz
+          }
+
+          menuentry "Quasar Linux (Safe / Debug Mode)" {
+              linux /boot/bzImage console=tty0 console=ttyS0,115200 nomodeset earlyprintk=vga loglevel=7 rdinit=/init
+              initrd /boot/initramfs.cpio.gz
           }
           EOF
 
